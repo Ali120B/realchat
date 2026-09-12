@@ -11,6 +11,17 @@ function now() {
   return Date.now()
 }
 
+function digitsOf(jid) {
+  return String(jid || '').split('@')[0].replace(/\D/g, '')
+}
+
+function sameDm(a, b) {
+  if (!a || !b || a.endsWith('@g.us') || b.endsWith('@g.us')) return false
+  const da = digitsOf(a)
+  const db = digitsOf(b)
+  return da.length >= 7 && da === db
+}
+
 function prettyPhone(jid) {
   const digits = String(jid || '').split('@')[0].replace(/\D/g, '')
   if (!digits) return 'Unknown'
@@ -184,6 +195,7 @@ function toChat(id, chats, contacts, messages) {
     muted: !!c.muted || (c.muteEndTime || 0) * 1000 > now(),
     pinned: !!c.pinned || (c.pinInChat || 0) > 0,
     archived: !!c.archived,
+    online: isOnline(id),
   }
 }
 
@@ -207,6 +219,8 @@ function createWaService({ authDir, cacheDir, emit }) {
   const rawOrder = []
   const lidCache = new Map() // @lid jid -> resolved @s.whatsapp.net jid
   const senderNames = new Map() // participant jid -> display name (from pushName)
+  const onlineChats = new Set() // chat/participant JIDs currently online
+  const subscribedPresence = new Set() // JIDs we've sent presenceSubscribe for
   let showArchived = false
   let metaRefreshTimer = null
 
@@ -295,20 +309,18 @@ function createWaService({ authDir, cacheDir, emit }) {
     return n
   }
 
-  // Re-key a single @lid chat to its PN (merges duplicates). Returns true if moved.
-  function rekeyChat(lid, pn) {
-    if (!lid || !pn || lid === pn || !chats.has(lid)) return false
-    lidCache.set(lid, pn)
-    const prev = chats.get(lid) || {}
-    const target = chats.get(pn) || {}
+  // Merge one chat into another (messages, contacts, unread). Returns true if moved.
+  function mergeChats(fromId, toId) {
+    if (!fromId || !toId || fromId === toId || !chats.has(fromId)) return false
+    const prev = chats.get(fromId) || {}
+    const target = chats.get(toId) || {}
     const prevTs = prev.conversationTimestamp || prev.lastMessageRecvTimestamp || 0
     const targetTs = target.conversationTimestamp || target.lastMessageRecvTimestamp || 0
-    chats.set(pn, { ...(prevTs > targetTs ? prev : target), ...(prevTs > targetTs ? target : prev), id: pn })
-    chats.delete(lid)
-    // Merge contact records (saved names live under the PN)
-    const lc = contacts.get(lid) || {}
-    const tc = contacts.get(pn) || {}
-    contacts.set(pn, {
+    chats.set(toId, { ...(prevTs > targetTs ? prev : target), ...(prevTs > targetTs ? target : prev), id: toId })
+    chats.delete(fromId)
+    const lc = contacts.get(fromId) || {}
+    const tc = contacts.get(toId) || {}
+    contacts.set(toId, {
       ...lc,
       ...tc,
       name: tc.name || lc.name,
@@ -317,17 +329,88 @@ function createWaService({ authDir, cacheDir, emit }) {
       pic: tc.pic || lc.pic,
       picTs: tc.picTs || lc.picTs,
     })
-    contacts.delete(lid)
-    if (messages.has(lid)) {
-      const merged = [...(messages.get(pn) || []), ...messages.get(lid)]
+    contacts.delete(fromId)
+    if (messages.has(fromId)) {
+      const merged = [...(messages.get(toId) || []), ...messages.get(fromId)]
       const seen = new Set()
       messages.set(
-        pn,
-        merged.filter((m) => (seen.has(m.id) ? false : (seen.add(m.id), (m.chatId = pn), true))).sort((a, b) => a.ts - b.ts),
+        toId,
+        merged.filter((m) => (seen.has(m.id) ? false : (seen.add(m.id), (m.chatId = toId), true))).sort((a, b) => a.ts - b.ts),
       )
-      messages.delete(lid)
+      messages.delete(fromId)
     }
     return true
+  }
+
+  // Re-key a single @lid chat to its PN (merges duplicates). Returns true if moved.
+  function rekeyChat(lid, pn) {
+    if (!lid || !pn || lid === pn || !chats.has(lid)) return false
+    lidCache.set(lid, pn)
+    return mergeChats(lid, pn)
+  }
+
+  // Find an existing DM chat for the same phone digits (catches LID/PN + legacy splits)
+  function findDmByDigits(jid, excludeId) {
+    if (!jid || jid.endsWith('@g.us')) return null
+    for (const id of chats.keys()) {
+      if (id === excludeId || id === jid || isJunkChat(id)) continue
+      if (sameDm(id, jid)) return id
+    }
+    return null
+  }
+
+  // Subscribe presence for the most-recent DMs so the list can show online dots.
+  // (WhatsApp only pushes presence for subscribed chats.)
+  let presenceTimer = null
+  function schedulePresenceRefresh() {
+    if (presenceTimer) return
+    presenceTimer = setTimeout(() => {
+      presenceTimer = null
+      void refreshPresenceSubs()
+    }, 3000)
+  }
+
+  async function refreshPresenceSubs() {
+    if (!sock || stopped || connection !== 'ready') return
+    const ids = [...chats.keys()]
+      .filter((id) => !isJunkChat(id) && !id.endsWith('@g.us') && !(chats.get(id) || {}).archived)
+      .sort((a, b) => ((chats.get(b) || {}).conversationTimestamp || 0) - ((chats.get(a) || {}).conversationTimestamp || 0))
+      .slice(0, 25)
+    for (const id of ids) {
+      if (subscribedPresence.has(id)) continue
+      try {
+        await sock.presenceSubscribe(id)
+        subscribedPresence.add(id)
+      } catch {
+        // presence not available for this chat — skip
+      }
+    }
+  }
+
+  function clearPresenceSubs() {
+    subscribedPresence.clear()
+    if (onlineChats.size > 0) {
+      onlineChats.clear()
+      emit({ kind: 'online-reset' })
+    }
+  }
+
+  function isOnlinePresence(state) {
+    return state === 'available' || state === 'composing' || state === 'recording' || state === 'paused'
+  }
+
+  function isOnline(id) {
+    if (!id || onlineChats.size === 0) return false
+    if (onlineChats.has(id)) return true
+    for (const [lid, pn] of lidCache) {
+      if ((lid === id && onlineChats.has(pn)) || (pn === id && onlineChats.has(lid))) return true
+    }
+    if (!id.endsWith('@g.us')) {
+      for (const tracked of onlineChats) {
+        if (sameDm(tracked, id)) return true
+      }
+    }
+    return false
   }
 
   // Resolve @lid addresses to phone-number JIDs (cached). Falls back to input.
@@ -387,6 +470,32 @@ function createWaService({ authDir, cacheDir, emit }) {
 
   async function refreshMeta() {
     if (!sock || stopped) return
+    // Fold same-number DM twins (LID/PN or legacy splits) — one chat per person.
+    let twinsMerged = 0
+    const seenDigits = new Map()
+    for (const id of [...chats.keys()]) {
+      if (isJunkChat(id) || id.endsWith('@g.us')) continue
+      const d = digitsOf(id)
+      if (d.length < 7) continue
+      const first = seenDigits.get(d)
+      if (!first) {
+        seenDigits.set(d, id)
+        continue
+      }
+      // Keep the chat that has messages; merge the other into it
+      const aMsgs = (messages.get(first) || []).length
+      const bMsgs = (messages.get(id) || []).length
+      const keep = bMsgs > aMsgs ? id : first
+      const drop = keep === id ? first : id
+      if (mergeChats(drop, keep)) {
+        twinsMerged += 1
+        seenDigits.set(d, keep)
+      }
+    }
+    if (twinsMerged > 0) {
+      console.log(`[chattt:wa] merged ${twinsMerged} duplicate chats`)
+      emit({ kind: 'chats', chats: publicChats(), archived: archivedCount() })
+    }
     // Re-key chats stuck on @lid (parallel, bounded) once mappings are learnable
     const stuck = [...chats.keys()].filter((id) => id.endsWith('@lid') && !lidCache.has(id)).slice(0, 60)
     if (stuck.length > 0) {
@@ -512,6 +621,7 @@ function createWaService({ authDir, cacheDir, emit }) {
   function stop() {
     stopped = true
     stopResync()
+    clearPresenceSubs()
     try {
       sock?.end()
     } catch {
@@ -570,6 +680,7 @@ function createWaService({ authDir, cacheDir, emit }) {
         // History sync alone does NOT deliver phone-saved contact names on warm restarts.
         startResyncLoop()
         scheduleMetaRefresh()
+        schedulePresenceRefresh()
         // history.set flips us to ready; fallback timer in case it never arrives
         setTimeout(() => {
           if (connection === 'syncing') {
@@ -581,6 +692,7 @@ function createWaService({ authDir, cacheDir, emit }) {
       }
       if (conn === 'close') {
         stopResync()
+        clearPresenceSubs()
         const code = lastDisconnect?.error?.output?.statusCode
         if (code === DisconnectReason.loggedOut || code === 405) {
           try {
@@ -666,6 +778,7 @@ function createWaService({ authDir, cacheDir, emit }) {
       emit({ kind: 'chats', chats: publicChats(), archived: archivedCount() })
       scheduleSnapshot()
       scheduleMetaRefresh()
+      schedulePresenceRefresh()
     })
     sock.ev.on('chats.update', async (list) => {
       for (const c of list) {
@@ -744,7 +857,37 @@ function createWaService({ authDir, cacheDir, emit }) {
       const byChat = new Map()
       for (const m of list || []) {
         if (!m.key?.remoteJid || isJunkChat(m.key.remoteJid) || isProtocolOnly(m)) continue
-        const chatId = await normalizeJid(m.key.remoteJid)
+        let chatId = await normalizeJid(m.key.remoteJid)
+        // Learn identity links from the stanza itself (alt forms cross LID/PN)
+        const alt = m.key.remoteJidAlt
+        if (alt && alt !== m.key.remoteJid && !isJunkChat(alt)) {
+          const altNorm = await normalizeJid(alt)
+          if (altNorm !== chatId && sameDm(altNorm, chatId)) {
+            if (altNorm.endsWith('@lid') && !lidCache.has(altNorm)) lidCache.set(altNorm, chatId)
+            else if (chatId.endsWith('@lid') && !lidCache.has(chatId)) lidCache.set(chatId, altNorm)
+          }
+        }
+        // Fold into an existing same-number chat instead of spawning a twin
+        if (!chats.has(chatId)) {
+          const twin = findDmByDigits(chatId, chatId)
+          if (twin) {
+            const orphan = contacts.get(chatId)
+            if (orphan) {
+              const tc = contacts.get(twin) || {}
+              contacts.set(twin, {
+                ...orphan,
+                ...tc,
+                name: tc.name || orphan.name,
+                notify: tc.notify || orphan.notify,
+                savedName: tc.savedName || orphan.savedName,
+                pic: tc.pic || orphan.pic,
+                picTs: tc.picTs || orphan.picTs,
+              })
+              contacts.delete(chatId)
+            }
+            chatId = twin
+          }
+        }
         rememberRaw(m.key.id, m)
         const { senderJid, senderName } = await resolveSender(m.key, m.pushName)
         const n = normalizeMsg(m, { chatId, senderJid, senderName })
@@ -777,8 +920,10 @@ function createWaService({ authDir, cacheDir, emit }) {
         const id = u.key?.id
         const rawChatId = u.key?.remoteJid
         if (!id || !rawChatId) continue
-        // Updates may reference the LID copy — check both forms
+        // Updates may reference either identity form — gather every candidate,
+        // including the alt JID the server sometimes attaches, then digit-match.
         const candidates = [rawChatId]
+        if (u.key.remoteJidAlt && u.key.remoteJidAlt !== rawChatId) candidates.push(u.key.remoteJidAlt)
         if (rawChatId.endsWith('@lid')) {
           const mapped = lidCache.get(rawChatId)
           if (mapped) candidates.push(mapped)
@@ -798,6 +943,16 @@ function createWaService({ authDir, cacheDir, emit }) {
             m = found
             chatId = cid
             break
+          }
+        }
+        if (!m && !rawChatId.endsWith('@g.us')) {
+          const twin = findDmByDigits(rawChatId, rawChatId)
+          if (twin) {
+            const found = (messages.get(twin) || []).find((x) => x.id === id)
+            if (found) {
+              m = found
+              chatId = twin
+            }
           }
         }
         if (!m || !chatId) continue
@@ -876,7 +1031,12 @@ function createWaService({ authDir, cacheDir, emit }) {
       for (const [participant, p] of Object.entries(presences || {})) {
         const state = p.lastKnownPresence
         if (!state) continue
-        emit({ kind: 'presence', chatId: id, from: participant, state })
+        const online = isOnlinePresence(state)
+        // Track per-chat online state (DM id, or participant inside a group)
+        const trackId = id && id.endsWith('@g.us') ? participant : id
+        if (online) onlineChats.add(trackId)
+        else onlineChats.delete(trackId)
+        emit({ kind: 'presence', chatId: id, from: participant, state, online })
       }
     })
   }
@@ -899,12 +1059,17 @@ function createWaService({ authDir, cacheDir, emit }) {
       if (raw) quoted = raw
     }
     const sent = await s.sendMessage(target, { text: body }, quoted ? { quoted } : undefined)
-    const n = normalizeMsg(sent, { chatId: target, senderJid: null, senderName: undefined })
+    // The server echo is canonical: adopt its chat id, merging any split twin.
+    const echoId = (await normalizeJid(sent?.key?.remoteJid)) || target
+    if (echoId !== target && chats.has(target)) mergeChats(target, echoId)
+    const twin = findDmByDigits(echoId, echoId)
+    if (twin) mergeChats(twin, echoId)
+    const n = normalizeMsg(sent, { chatId: echoId, senderJid: null, senderName: undefined })
     rememberRaw(n.id, sent)
-    pushMessages(target, [{ ...n, fromMe: true, status: 'sent' }])
-    emit({ kind: 'messages', chatId: target, messages: messages.get(target).slice(-1), reset: false })
+    pushMessages(echoId, [{ ...n, fromMe: true, status: 'sent' }])
+    emit({ kind: 'messages', chatId: echoId, messages: messages.get(echoId).slice(-1), reset: false })
     emit({ kind: 'chats', chats: publicChats(), archived: archivedCount() })
-    return { ok: true, id: n.id }
+    return { ok: true, id: n.id, chatId: echoId }
   }
 
   async function react(chatId, msgId, emoji) {
@@ -990,6 +1155,7 @@ function createWaService({ authDir, cacheDir, emit }) {
 
   async function logout() {
     stopResync()
+    clearPresenceSubs()
     try {
       await sock?.logout()
     } catch {
@@ -1045,6 +1211,22 @@ function createWaService({ authDir, cacheDir, emit }) {
     return { ok: true }
   }
 
+  // Watch a chat for live presence (call when the user opens it).
+  // Also subscribes so initial online state arrives within seconds.
+  async function watchChat(chatId) {
+    try {
+      const s = requireSock()
+      const target = (await normalizeJid(chatId)) || chatId
+      if (!subscribedPresence.has(target)) {
+        await s.presenceSubscribe(target)
+        subscribedPresence.add(target)
+      }
+    } catch {
+      // presence unavailable — non-fatal
+    }
+    return { ok: true }
+  }
+
   async function pickAndSend(chatId, filePath) {
     const s = requireSock()
     const target = await normalizeJid(chatId)
@@ -1059,12 +1241,16 @@ function createWaService({ authDir, cacheDir, emit }) {
     else if (audio.includes(ext)) content = { audio: data, mimetype: 'audio/ogg; codecs=opus' }
     else content = { document: data, fileName: path.basename(filePath) }
     const sent = await s.sendMessage(target, content)
-    const n = normalizeMsg(sent, { chatId: target, senderJid: null, senderName: undefined })
+    const echoId = (await normalizeJid(sent?.key?.remoteJid)) || target
+    if (echoId !== target && chats.has(target)) mergeChats(target, echoId)
+    const twin = findDmByDigits(echoId, echoId)
+    if (twin) mergeChats(twin, echoId)
+    const n = normalizeMsg(sent, { chatId: echoId, senderJid: null, senderName: undefined })
     rememberRaw(n.id, sent)
-    pushMessages(target, [{ ...n, fromMe: true, status: 'sent' }])
-    emit({ kind: 'messages', chatId: target, messages: messages.get(target).slice(-1), reset: false })
+    pushMessages(echoId, [{ ...n, fromMe: true, status: 'sent' }])
+    emit({ kind: 'messages', chatId: echoId, messages: messages.get(echoId).slice(-1), reset: false })
     emit({ kind: 'chats', chats: publicChats(), archived: archivedCount() })
-    return { ok: true, id: n.id }
+    return { ok: true, id: n.id, chatId: echoId }
   }
 
   async function getMedia(msgId) {
@@ -1171,6 +1357,7 @@ function createWaService({ authDir, cacheDir, emit }) {
     logout,
     groupInfo,
     sendPresence,
+    watchChat,
     pickAndSend,
     getMedia,
     searchMessages,

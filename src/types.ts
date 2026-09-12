@@ -13,6 +13,7 @@ export interface Chat {
   muted: boolean
   pinned: boolean
   archived?: boolean
+  online?: boolean
 }
 
 export type MsgType = 'text' | 'image' | 'voice' | 'video' | 'doc' | 'sticker' | 'location' | 'contact'

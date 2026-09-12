@@ -40,6 +40,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     logout: () => ipcRenderer.invoke('wa:logout'),
     groupInfo: (chatId) => ipcRenderer.invoke('wa:group-info', chatId),
     presence: (chatId, state) => ipcRenderer.invoke('wa:presence', chatId, state),
+    watch: (chatId) => ipcRenderer.invoke('wa:watch', chatId),
     getMedia: (msgId) => ipcRenderer.invoke('wa:get-media', msgId),
     searchMessages: (query, chatId) => ipcRenderer.invoke('wa:search-messages', query, chatId),
     resolveContact: (query) => ipcRenderer.invoke('wa:resolve-contact', query),

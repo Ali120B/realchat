@@ -318,6 +318,7 @@ function initWa() {
   waHandler('wa:logout', () => wa.logout())
   waHandler('wa:group-info', (chatId) => wa.groupInfo(chatId))
   waHandler('wa:presence', (chatId, state) => wa.sendPresence(chatId, state))
+  waHandler('wa:watch', (chatId) => wa.watchChat(chatId))
   waHandler('wa:get-media', (msgId) => wa.getMedia(msgId))
   waHandler('wa:search-messages', (query, chatId) => wa.searchMessages(query, chatId))
   waHandler('wa:resolve-contact', (query) => wa.resolveContact(query))

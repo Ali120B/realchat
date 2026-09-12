@@ -5,7 +5,7 @@ import { useUiStore } from '@/store/uiStore'
 import { playBeep } from '@/services/sound'
 
 const MOCK_CHATS: Chat[] = [
-  { id: '1', name: 'Alex', isGroup: false, lastMsg: 'Hey, what’s up?', ts: Date.now() - 60_000, unread: 2, muted: false, pinned: true },
+  { id: '1', name: 'Alex', isGroup: false, lastMsg: 'Hey, what’s up?', ts: Date.now() - 60_000, unread: 2, muted: false, pinned: true, online: true },
   { id: '2', name: 'Family', isGroup: true, lastMsg: 'Mom: Dinner at 8', ts: Date.now() - 600_000, unread: 0, muted: true, pinned: false },
   { id: '3', name: 'John', isGroup: false, lastMsg: '👍', ts: Date.now() - 3_600_000, unread: 0, muted: false, pinned: false },
 ]
@@ -21,6 +21,7 @@ export interface Presence {
   from: string
   state: string
   at: number
+  online?: boolean
 }
 
 export interface ContactResult {
@@ -163,7 +164,12 @@ export const useWaStore = create<WaState>((set, get) => {
         switch (payload.kind) {
           case 'connection': {
             const state = payload.state as ConnState
+            const wasReady = get().connection === 'ready'
             set({ connection: state })
+            if (state !== 'ready' && wasReady) {
+              // Fresh session — drop stale presence/online states
+              set({ presenceByChat: {} })
+            }
             if (state === 'ready') {
               set({ qrDataUrl: null, pairingCode: null })
               void bridge.getChats().then((chats) => {
@@ -221,18 +227,28 @@ export const useWaStore = create<WaState>((set, get) => {
           case 'presence': {
             const chatId = payload.chatId as string
             if (!chatId) break
-            const presence: Presence = { from: String(payload.from || ''), state: String(payload.state || ''), at: Date.now() }
-            set((s) => ({ presenceByChat: { ...s.presenceByChat, [chatId]: presence } }))
+            const online = typeof payload.online === 'boolean' ? (payload.online as boolean) : undefined
+            const presence: Presence = { from: String(payload.from || ''), state: String(payload.state || ''), at: Date.now(), online }
+            set((s) => ({
+              presenceByChat: { ...s.presenceByChat, [chatId]: presence },
+              // Mirror online state onto the chat row for the list dot
+              chats: typeof online === 'boolean' ? s.chats.map((c) => (c.id === chatId ? { ...c, online } : c)) : s.chats,
+            }))
+            // Typing flags clear fast; online flags go stale slowly
+            const ttl = presence.state === 'composing' || presence.state === 'recording' ? 6000 : 120000
             setTimeout(() => {
               const cur = get().presenceByChat[chatId]
               if (cur && cur.at === presence.at) {
                 set((s) => {
                   const next = { ...s.presenceByChat }
                   delete next[chatId]
-                  return { presenceByChat: next }
+                  return {
+                    presenceByChat: next,
+                    chats: s.chats.map((c) => (c.id === chatId ? { ...c, online: false } : c)),
+                  }
                 })
               }
-            }, 6000)
+            }, ttl)
             break
           }
           case 'notify': {
@@ -257,6 +273,7 @@ export const useWaStore = create<WaState>((set, get) => {
       set({ activeChatId: id, replyToId: null })
       const bridge = api()
       if (id && bridge) {
+        void bridge.watch(id).catch(() => {})
         void bridge.getMessages(id).then((list) => {
           if (Array.isArray(list)) mergeMessages(id, list as Msg[], true)
         }).catch(() => {})
@@ -288,7 +305,12 @@ export const useWaStore = create<WaState>((set, get) => {
       const replyToId = get().replyToId
       set({ replyToId: null })
       void bridge.sendText(chatId, text, replyToId).then((res) => {
-        if (!res?.ok) useToastStore.getState().push(failMsg(res), 'error')
+        if (!res?.ok) {
+          useToastStore.getState().push(failMsg(res), 'error')
+        } else if (res.chatId && res.chatId !== chatId) {
+          // Server filed the message under the canonical twin — follow it
+          get().setActiveChat(String(res.chatId))
+        }
       }).catch((e) => useToastStore.getState().push(failMsg(e), 'error'))
     },
 

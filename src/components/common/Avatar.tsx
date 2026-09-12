@@ -20,12 +20,14 @@ export function Avatar({
   chatId,
   isGroup = false,
   size = 36,
+  online = false,
 }: {
   name: string
   pic?: string | null
   chatId?: string
   isGroup?: boolean
   size?: number
+  online?: boolean
 }) {
   const [failed, setFailed] = useState(false)
   const retried = useRef(false)
@@ -41,21 +43,32 @@ export function Avatar({
   }
 
   return (
-    <span
-      className="flex shrink-0 items-center justify-center overflow-hidden rounded-full font-semibold"
-      style={{
-        width: size,
-        height: size,
-        fontSize: size * 0.38,
-        background: showImg ? 'rgba(255,255,255,0.08)' : `hsla(${hueOf(name || '?')}, 70%, 45%, 0.35)`,
-        border: '1px solid rgba(255,255,255,0.12)',
-      }}
-      aria-hidden="true"
-    >
-      {showImg ? (
-        <img src={pic} alt="" width={size} height={size} style={{ width: size, height: size, objectFit: 'cover' }} onError={handleError} draggable={false} />
-      ) : (
-        <span className="text-white/90">{isGroup ? '👥' : initialOf(name)}</span>
+    <span className="relative inline-flex shrink-0" style={{ width: size, height: size }} aria-hidden="true">
+      <span
+        className="flex items-center justify-center overflow-hidden rounded-full font-semibold"
+        style={{
+          width: size,
+          height: size,
+          fontSize: size * 0.38,
+          background: showImg ? 'rgba(255,255,255,0.08)' : `hsla(${hueOf(name || '?')}, 70%, 45%, 0.35)`,
+          border: '1px solid rgba(255,255,255,0.12)',
+        }}
+      >
+        {showImg ? (
+          <img src={pic} alt="" width={size} height={size} style={{ width: size, height: size, objectFit: 'cover' }} onError={handleError} draggable={false} />
+        ) : (
+          <span className="text-white/90">{isGroup ? '👥' : initialOf(name)}</span>
+        )}
+      </span>
+      {online && (
+        <span
+          className="absolute right-0 bottom-0 rounded-full bg-emerald-400"
+          style={{
+            width: Math.max(8, size * 0.28),
+            height: Math.max(8, size * 0.28),
+            border: '2px solid rgba(20,22,24,0.9)',
+          }}
+        />
       )}
     </span>
   )

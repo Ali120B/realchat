@@ -19,6 +19,7 @@ interface WaBridge {
   logout: () => Promise<WaResult>
   groupInfo: (chatId: string) => Promise<WaResult>
   presence: (chatId: string, state: string) => Promise<WaResult>
+  watch: (chatId: string) => Promise<WaResult>
   getMedia: (msgId: string) => Promise<WaResult>
   searchMessages: (query: string, chatId?: string | null) => Promise<unknown[] | WaResult>
   resolveContact: (query: string) => Promise<WaResult>

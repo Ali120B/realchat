@@ -112,6 +112,7 @@ export function ChatView() {
   }
 
   const typing = presence && (presence.state === 'composing' || presence.state === 'recording')
+  const online = !chat.isGroup && (presence?.online ?? chat.online ?? false)
   const menuMsg = menuMsgId ? allMessages.find((m) => m.id === menuMsgId) : undefined
 
   const send = () => {
@@ -165,11 +166,11 @@ export function ChatView() {
         <button type="button" onClick={() => setView('home')} className="rounded-full px-1.5 py-0.5 text-sm hover:bg-white/10" aria-label="Back to chats">
           ←
         </button>
-        <Avatar name={chat.name} pic={chat.pic} chatId={chat.id} isGroup={chat.isGroup} size={28} />
+        <Avatar name={chat.name} pic={chat.pic} chatId={chat.id} isGroup={chat.isGroup} size={28} online={online} />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-medium">{chat.name}</span>
-          <span className="block truncate text-[10px] text-emerald-300">
-            {typing ? 'typing…' : chat.isGroup ? `${chat.unread > 0 ? `${chat.unread} unread • ` : ''}Group` : 'tap search for history'}
+          <span className={`block truncate text-[10px] ${typing || online ? 'text-emerald-300' : 'text-[var(--color-text-secondary)]'}`}>
+            {typing ? 'typing…' : online ? 'online' : chat.isGroup ? `${chat.unread > 0 ? `${chat.unread} unread • ` : ''}Group` : 'tap search for history'}
           </span>
         </span>
         <button type="button" onClick={() => setSearchOpen((v) => !v)} className="rounded-full px-1.5 py-0.5 text-sm hover:bg-white/10" aria-label="Search in conversation">
