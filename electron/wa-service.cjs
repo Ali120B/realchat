@@ -22,6 +22,22 @@ function sameDm(a, b) {
   return da.length >= 7 && da === db
 }
 
+function isOnlineIn(id, onlineChats, lidCache) {
+  if (!id || !onlineChats || onlineChats.size === 0) return false
+  if (onlineChats.has(id)) return true
+  if (lidCache) {
+    for (const [lid, pn] of lidCache) {
+      if ((lid === id && onlineChats.has(pn)) || (pn === id && onlineChats.has(lid))) return true
+    }
+  }
+  if (!id.endsWith('@g.us')) {
+    for (const tracked of onlineChats) {
+      if (sameDm(tracked, id)) return true
+    }
+  }
+  return false
+}
+
 function prettyPhone(jid) {
   const digits = String(jid || '').split('@')[0].replace(/\D/g, '')
   if (!digits) return 'Unknown'
@@ -179,7 +195,7 @@ function lastMsgLabel(m) {
   return typeLabel(m.type)
 }
 
-function toChat(id, chats, contacts, messages) {
+function toChat(id, chats, contacts, messages, presence) {
   const c = chats.get(id) || {}
   const msgs = messages.get(id) || []
   const last = msgs[msgs.length - 1]
@@ -195,7 +211,7 @@ function toChat(id, chats, contacts, messages) {
     muted: !!c.muted || (c.muteEndTime || 0) * 1000 > now(),
     pinned: !!c.pinned || (c.pinInChat || 0) > 0,
     archived: !!c.archived,
-    online: isOnline(id),
+    online: presence ? isOnlineIn(id, presence.onlineChats, presence.lidCache) : false,
   }
 }
 
@@ -294,9 +310,10 @@ function createWaService({ authDir, cacheDir, emit }) {
   }
 
   function publicChats() {
+    const presence = { onlineChats, lidCache }
     return [...chats.keys()]
       .filter((id) => !isJunkChat(id))
-      .map((id) => toChat(id, chats, contacts, messages))
+      .map((id) => toChat(id, chats, contacts, messages, presence))
       .filter((c) => (showArchived ? true : !c.archived))
       .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.ts - a.ts)
   }
@@ -397,20 +414,6 @@ function createWaService({ authDir, cacheDir, emit }) {
 
   function isOnlinePresence(state) {
     return state === 'available' || state === 'composing' || state === 'recording' || state === 'paused'
-  }
-
-  function isOnline(id) {
-    if (!id || onlineChats.size === 0) return false
-    if (onlineChats.has(id)) return true
-    for (const [lid, pn] of lidCache) {
-      if ((lid === id && onlineChats.has(pn)) || (pn === id && onlineChats.has(lid))) return true
-    }
-    if (!id.endsWith('@g.us')) {
-      for (const tracked of onlineChats) {
-        if (sameDm(tracked, id)) return true
-      }
-    }
-    return false
   }
 
   // Resolve @lid addresses to phone-number JIDs (cached). Falls back to input.
@@ -906,7 +909,7 @@ function createWaService({ authDir, cacheDir, emit }) {
           emit({ kind: 'chats', chats: publicChats(), archived: archivedCount() })
           for (const m of fresh) {
             if (isLive && !m.fromMe) {
-              const chat = toChat(chatId, chats, contacts, messages)
+              const chat = toChat(chatId, chats, contacts, messages, { onlineChats, lidCache })
               if (!chat.muted) emit({ kind: 'notify', chatId, title: chat.name, body: m.body || typeLabel(m.type) })
             }
           }
@@ -1330,7 +1333,7 @@ function createWaService({ authDir, cacheDir, emit }) {
     if (!messages.has(target)) messages.set(target, [])
     scheduleSnapshot()
     scheduleMetaRefresh()
-    const chat = toChat(target, chats, contacts, messages)
+    const chat = toChat(target, chats, contacts, messages, { onlineChats, lidCache })
     emit({ kind: 'chats', chats: publicChats(), archived: archivedCount() })
     return { ok: true, chat }
   }

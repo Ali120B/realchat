@@ -12,7 +12,8 @@
     "build": "tsc -b && vite build && node scripts/sync-electron.cjs",
     "dist:win": "npm run build && electron-builder --win",
     "dist:linux": "npm run build && electron-builder --linux --x64",
-    "lint": "npx tsc --noEmit -p tsconfig.app.json"
+    "lint": "npx tsc --noEmit -p tsconfig.app.json",
+    "smoke:wa": "node scripts/smoke-wa.cjs"
   },
   "dependencies": {
     "baileys": "7.0.0-rc14",
