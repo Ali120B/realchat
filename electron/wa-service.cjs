@@ -15,6 +15,14 @@ function digitsOf(jid) {
   return String(jid || '').split('@')[0].replace(/\D/g, '')
 }
 
+// Mask a JID for logs: +971***7720@s.whatsapp.net (privacy-safe, still identifiable)
+function maskJid(jid) {
+  const [user = '', host = ''] = String(jid || '').split('@')
+  const d = user.replace(/\D/g, '')
+  if (d.length <= 4) return `***@${host}`
+  return `+${d.slice(0, 3)}***${d.slice(-4)}@${host}`
+}
+
 function sameDm(a, b) {
   if (!a || !b || a.endsWith('@g.us') || b.endsWith('@g.us')) return false
   const da = digitsOf(a)
@@ -328,7 +336,8 @@ function createWaService({ authDir, cacheDir, emit }) {
   }
 
   // Merge one chat into another (messages, contacts, unread). Returns true if moved.
-  function mergeChats(fromId, toId) {
+  // NOTHING is deleted: both message lists are combined, deduped by id, sorted.
+  function mergeChats(fromId, toId, reason) {
     if (!fromId || !toId || fromId === toId || !chats.has(fromId)) return false
     const prev = chats.get(fromId) || {}
     const target = chats.get(toId) || {}
@@ -357,6 +366,9 @@ function createWaService({ authDir, cacheDir, emit }) {
       )
       messages.delete(fromId)
     }
+    console.log(
+      `[chattt:wa] merged twin ${maskJid(fromId)} → ${maskJid(toId)} (${reason || 'duplicate'}) — ${(messages.get(toId) || []).length} msgs combined`,
+    )
     return true
   }
 
@@ -364,7 +376,7 @@ function createWaService({ authDir, cacheDir, emit }) {
   function rekeyChat(lid, pn) {
     if (!lid || !pn || lid === pn || !chats.has(lid)) return false
     lidCache.set(lid, pn)
-    return mergeChats(lid, pn)
+    return mergeChats(lid, pn, 'server LID mapping')
   }
 
   // Find an existing DM chat for the same phone digits (catches LID/PN + legacy splits)
@@ -491,7 +503,7 @@ function createWaService({ authDir, cacheDir, emit }) {
       const bMsgs = (messages.get(id) || []).length
       const keep = bMsgs > aMsgs ? id : first
       const drop = keep === id ? first : id
-      if (mergeChats(drop, keep)) {
+      if (mergeChats(drop, keep, 'same-number sweep')) {
         twinsMerged += 1
         seenDigits.set(d, keep)
       }
@@ -1097,9 +1109,9 @@ function createWaService({ authDir, cacheDir, emit }) {
     const sent = await s.sendMessage(target, { text: body }, quoted ? { quoted } : undefined)
     // The server echo is canonical: adopt its chat id, merging any split twin.
     const echoId = (await normalizeJid(sent?.key?.remoteJid)) || target
-    if (echoId !== target && chats.has(target)) mergeChats(target, echoId)
+    if (echoId !== target && chats.has(target)) mergeChats(target, echoId, 'server send echo')
     const twin = findDmByDigits(echoId, echoId)
-    if (twin) mergeChats(twin, echoId)
+    if (twin) mergeChats(twin, echoId, 'same-number send')
     const n = normalizeMsg(sent, { chatId: echoId, senderJid: null, senderName: undefined })
     rememberRaw(n.id, sent)
     pushMessages(echoId, [{ ...n, fromMe: true, status: 'sent' }])
@@ -1279,9 +1291,9 @@ function createWaService({ authDir, cacheDir, emit }) {
     else content = { document: data, fileName: path.basename(filePath) }
     const sent = await s.sendMessage(target, content)
     const echoId = (await normalizeJid(sent?.key?.remoteJid)) || target
-    if (echoId !== target && chats.has(target)) mergeChats(target, echoId)
+    if (echoId !== target && chats.has(target)) mergeChats(target, echoId, 'server send echo')
     const twin = findDmByDigits(echoId, echoId)
-    if (twin) mergeChats(twin, echoId)
+    if (twin) mergeChats(twin, echoId, 'same-number send')
     const n = normalizeMsg(sent, { chatId: echoId, senderJid: null, senderName: undefined })
     rememberRaw(n.id, sent)
     pushMessages(echoId, [{ ...n, fromMe: true, status: 'sent' }])
