@@ -81,6 +81,7 @@ function failMsg(err: unknown): string {
     'logged-out': 'Logged out — scan the QR to link again.',
     'message-not-found': 'Message no longer available.',
     'media-too-large': 'Media too large for the overlay (12MB cap).',
+    'media-expired': 'Media expired on WhatsApp — ask the sender to resend it.',
     'invalid-phone': 'Enter a full international number, e.g. +15551234567.',
     'cancelled': 'Cancelled.',
   }
@@ -440,7 +441,8 @@ export const useWaStore = create<WaState>((set, get) => {
     startChat: (jid) => {
       const bridge = api()
       if (!bridge || !jid) return
-      void bridge.startChat(jid).then((res) => {
+      const name = get().contactResult?.jid === jid ? get().contactResult?.name : null
+      void bridge.startChat(jid, name).then((res) => {
         if (res?.ok && res.chat) {
           const chat = res.chat as Chat
           set((s) => ({

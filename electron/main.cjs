@@ -347,7 +347,7 @@ function initWa() {
   waHandler('wa:get-media', (msgId) => wa.getMedia(msgId))
   waHandler('wa:search-messages', (query, chatId) => wa.searchMessages(query, chatId))
   waHandler('wa:resolve-contact', (query) => wa.resolveContact(query))
-  waHandler('wa:start-chat', (jid) => wa.startChat(jid))
+  waHandler('wa:start-chat', (jid, name) => wa.startChat(jid, name))
   waHandler('wa:show-archived', (show) => wa.setShowArchived(show))
   waHandler('wa:refresh-pic', (chatId) => wa.refreshPic(chatId))
   waHandler('wa:reset-cache', () => wa.resetCache())

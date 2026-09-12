@@ -23,7 +23,7 @@ interface WaBridge {
   getMedia: (msgId: string) => Promise<WaResult>
   searchMessages: (query: string, chatId?: string | null) => Promise<unknown[] | WaResult>
   resolveContact: (query: string) => Promise<WaResult>
-  startChat: (jid: string) => Promise<WaResult>
+  startChat: (jid: string, name?: string | null) => Promise<WaResult>
   showArchived: (show: boolean) => Promise<WaResult>
   refreshPic: (chatId: string) => Promise<WaResult>
   resetCache: () => Promise<WaResult>

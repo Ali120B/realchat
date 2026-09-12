@@ -44,7 +44,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getMedia: (msgId) => ipcRenderer.invoke('wa:get-media', msgId),
     searchMessages: (query, chatId) => ipcRenderer.invoke('wa:search-messages', query, chatId),
     resolveContact: (query) => ipcRenderer.invoke('wa:resolve-contact', query),
-    startChat: (jid) => ipcRenderer.invoke('wa:start-chat', jid),
+    startChat: (jid, name) => ipcRenderer.invoke('wa:start-chat', jid, name),
     showArchived: (show) => ipcRenderer.invoke('wa:show-archived', show),
     refreshPic: (chatId) => ipcRenderer.invoke('wa:refresh-pic', chatId),
     resetCache: () => ipcRenderer.invoke('wa:reset-cache'),

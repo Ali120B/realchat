@@ -297,6 +297,26 @@ function createWaService({ authDir, cacheDir, emit }) {
     return fresh
   }
 
+  // Media protos contain Buffers; strip thumbnails before JSON so the snapshot stays small.
+  // Revived on load so voice/images stay playable after an app restart.
+  function stripProtoMedia(protoMsg) {
+    try {
+      return JSON.parse(
+        JSON.stringify(protoMsg, (k, v) => (k === 'jpegThumbnail' || k === 'thumbnail' ? undefined : v)),
+      )
+    } catch {
+      return null
+    }
+  }
+
+  function reviveBuffers(obj) {
+    if (!obj || typeof obj !== 'object') return obj
+    if (obj.type === 'Buffer' && Array.isArray(obj.data)) return Buffer.from(obj.data)
+    if (Array.isArray(obj)) return obj.map(reviveBuffers)
+    for (const k of Object.keys(obj)) obj[k] = reviveBuffers(obj[k])
+    return obj
+  }
+
   let snapshotTimer = null
   function scheduleSnapshot() {
     if (snapshotTimer) return
@@ -304,11 +324,26 @@ function createWaService({ authDir, cacheDir, emit }) {
       snapshotTimer = null
       try {
         fs.mkdirSync(cacheDir, { recursive: true })
+        const rawMedia = {}
+        let rawCount = 0
+        for (const [, arr] of messages) {
+          for (const m of arr.slice(-SNAPSHOT_MSGS)) {
+            if (rawCount >= 150 || !m?.hasMedia) continue
+            const raw = rawById.get(m.id)
+            if (!raw) continue
+            const stripped = stripProtoMedia(raw)
+            if (stripped) {
+              rawMedia[m.id] = stripped
+              rawCount += 1
+            }
+          }
+        }
         const snap = {
           chats: [...chats.entries()].slice(-200),
           messages: [...messages.entries()].map(([id, arr]) => [id, arr.slice(-SNAPSHOT_MSGS)]),
           contacts: [...contacts.entries()].slice(-500),
           lid: [...lidCache.entries()].slice(-500),
+          rawMedia,
         }
         fs.writeFileSync(snapshotPath, JSON.stringify(snap))
       } catch {
@@ -330,15 +365,36 @@ function createWaService({ authDir, cacheDir, emit }) {
       }
       for (const [k, v] of snap.contacts || []) contacts.set(k, v)
       for (const [k, v] of snap.lid || []) lidCache.set(k, v)
+      for (const [k, v] of Object.entries(snap.rawMedia || {})) {
+        try {
+          rawById.set(k, reviveBuffers(v))
+          rawOrder.push(k)
+        } catch {
+          // skip corrupt entry
+        }
+      }
+      while (rawOrder.length > MSG_CAP * 4) {
+        rawById.delete(rawOrder.shift())
+      }
     } catch {
       // corrupt snapshot — start fresh
     }
   }
 
+  // Nameless husks (0 synced messages, no resolved name) are hidden everywhere.
+  // Abandoned start-chats and server stubs — pinned chats always show.
+  function isVisibleChat(id) {
+    const c = chats.get(id) || {}
+    if (c.pinned || (c.pinInChat || 0) > 0) return true
+    if ((messages.get(id) || []).length > 0) return true
+    const contact = contacts.get(id) || {}
+    return !!(c.name || contact.savedName || contact.name || contact.notify)
+  }
+
   function publicChats() {
     const presence = { onlineChats, lidCache }
     return [...chats.keys()]
-      .filter((id) => !isJunkChat(id))
+      .filter((id) => !isJunkChat(id) && isVisibleChat(id))
       .map((id) => toChat(id, chats, contacts, messages, presence))
       .filter((c) => (showArchived ? true : !c.archived))
       .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.ts - a.ts)
@@ -347,7 +403,7 @@ function createWaService({ authDir, cacheDir, emit }) {
   function archivedCount() {
     let n = 0
     for (const id of chats.keys()) {
-      if (!isJunkChat(id) && (chats.get(id) || {}).archived) n += 1
+      if (!isJunkChat(id) && isVisibleChat(id) && (chats.get(id) || {}).archived) n += 1
     }
     return n
   }
@@ -1349,7 +1405,13 @@ function createWaService({ authDir, cacheDir, emit }) {
     await ensureModules()
     const raw = rawById.get(msgId)
     if (!raw) throw new Error('message-not-found')
-    const buf = await B.downloadMediaMessage(raw, 'buffer', {})
+    let buf
+    try {
+      buf = await B.downloadMediaMessage(raw, 'buffer', {})
+    } catch {
+      // Keys expired or revoked server-side — re-download impossible
+      throw new Error('media-expired')
+    }
     if (!buf || buf.length > 12 * 1024 * 1024) throw new Error('media-too-large')
     const m = raw.message || {}
     const mime =
@@ -1412,12 +1474,16 @@ function createWaService({ authDir, cacheDir, emit }) {
     return { ok: true, exists: true, jid, name: contact.name || contact.notify || null }
   }
 
-  async function startChat(jid) {
+  async function startChat(jid, name) {
     requireSock()
     const target = await normalizeJid(jid)
     if (!target || isJunkChat(target)) throw new Error('invalid-chat')
     if (!chats.has(target)) {
       chats.set(target, { id: target, conversationTimestamp: Math.floor(now() / 1000), unreadCount: 0 })
+    }
+    if (name) {
+      const prev = contacts.get(target) || {}
+      if (!prev.savedName && !prev.name) contacts.set(target, { ...prev, notify: String(name) })
     }
     if (!messages.has(target)) messages.set(target, [])
     scheduleSnapshot()
