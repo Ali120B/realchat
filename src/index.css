@@ -1,0 +1,282 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-accent: #00b4ff;
+  --color-bg-window: rgba(25, 27, 29, 0.72);
+  --color-bg-input: rgba(25, 27, 29, 0.8);
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #a0a4a8;
+  --color-danger: #e53e3e;
+  --color-success: #38a169;
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --radius-window: 24px;
+  --radius-pill: 9999px;
+  --radius-message: 16px;
+}
+
+:root {
+  --color-accent: #00b4ff;
+  --accent-rgb: 0, 180, 255;
+  --glass-window-bg: rgba(25, 27, 29, 0.62);
+  --glass-window-blur: 32px;
+  --glass-pill-bg: rgba(25, 27, 29, 0.52);
+  --glass-pill-border: rgba(255, 255, 255, 0.16);
+  --glass-pill-blur: 28px;
+  --glass-pill-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  --glass-pill-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  --glass-chip-bg: rgba(25, 27, 29, 0.72);
+  --glass-chip-input-bg: rgba(25, 27, 29, 0.82);
+  --glass-chip-blur: 26px;
+  --glass-menu-bg: rgba(25, 27, 29, 0.72);
+  --glass-menu-blur: 30px;
+  --bubble-outgoing: rgba(0, 180, 255, 0.42);
+  --bubble-incoming: rgba(255, 255, 255, 0.22);
+  --text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.9);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: var(--color-text-primary);
+  -webkit-font-smoothing: antialiased;
+}
+
+.glass-text {
+  text-shadow: var(--text-shadow);
+}
+
+.glass-window {
+  background: var(--glass-window-bg);
+  backdrop-filter: blur(var(--glass-window-blur)) saturate(160%);
+  -webkit-backdrop-filter: blur(var(--glass-window-blur)) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  border-radius: var(--radius-window);
+}
+
+.glass-pill {
+  background: var(--glass-pill-bg);
+  backdrop-filter: blur(var(--glass-pill-blur)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--glass-pill-blur)) saturate(180%);
+  border: 1px solid var(--glass-pill-border);
+  box-shadow: var(--glass-pill-shadow), var(--glass-pill-highlight);
+  border-radius: var(--radius-pill);
+}
+
+.glass-chip {
+  background: var(--glass-chip-bg);
+  backdrop-filter: blur(var(--glass-chip-blur)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--glass-chip-blur)) saturate(180%);
+  border: 1px solid var(--glass-pill-border);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), var(--glass-pill-highlight);
+  border-radius: 24px;
+}
+
+.glass-chip-input {
+  background: var(--glass-chip-input-bg);
+}
+
+.glass-menu {
+  background: var(--glass-menu-bg);
+  backdrop-filter: blur(var(--glass-menu-blur)) saturate(200%);
+  -webkit-backdrop-filter: blur(var(--glass-menu-blur)) saturate(200%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), var(--glass-pill-highlight);
+  border-radius: 18px;
+}
+
+.glass-bubble-out {
+  background: var(--bubble-outgoing);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(var(--accent-rgb), 0.3);
+  border-radius: var(--radius-message);
+}
+
+.glass-bubble-in {
+  background: var(--bubble-incoming);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-message);
+}
+
+.scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+.scroll-thin::-webkit-scrollbar {
+  width: 4px;
+}
+
+.scroll-thin::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+
+/* ===== Animations ===== */
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideLeft {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slideRight {
+  from { opacity: 0; transform: translateX(-20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.92); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes scaleOut {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(0.92); }
+}
+
+@keyframes messagePop {
+  0% { opacity: 0; transform: scale(0.85) translateY(8px); }
+  60% { transform: scale(1.02) translateY(-1px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes contextMenuIn {
+  from { opacity: 0; transform: scale(0.88); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes typingDots {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  30% { transform: translateY(-4px); opacity: 1; }
+}
+
+@keyframes pulseGlow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(var(--accent-rgb), 0.4); }
+  50% { box-shadow: 0 0 12px 4px rgba(var(--accent-rgb), 0.15); }
+}
+
+@keyframes pillSlide {
+  from { transform: translateX(var(--pill-from, 0)); }
+  to { transform: translateX(0); }
+}
+
+@keyframes staggerFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes snap-slide {
+  from {
+    transform: translateX(var(--snap-from));
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+/* Utility animation classes */
+.animate-fade-in {
+  animation: fadeIn 250ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-slide-up {
+  animation: slideUp 300ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-slide-down {
+  animation: slideDown 300ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-slide-left {
+  animation: slideLeft 300ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-slide-right {
+  animation: slideRight 300ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-scale-in {
+  animation: scaleIn 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-message-pop {
+  animation: messagePop 350ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-context-menu-in {
+  animation: contextMenuIn 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-pulse-glow {
+  animation: pulseGlow 2s ease-in-out infinite;
+}
+
+.snap-animate {
+  animation: snap-slide 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Stagger children animation */
+.stagger-children > * {
+  animation: staggerFadeIn 300ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.stagger-children > *:nth-child(1) { animation-delay: 0ms; }
+.stagger-children > *:nth-child(2) { animation-delay: 40ms; }
+.stagger-children > *:nth-child(3) { animation-delay: 80ms; }
+.stagger-children > *:nth-child(4) { animation-delay: 120ms; }
+.stagger-children > *:nth-child(5) { animation-delay: 160ms; }
+.stagger-children > *:nth-child(6) { animation-delay: 200ms; }
+.stagger-children > *:nth-child(7) { animation-delay: 240ms; }
+.stagger-children > *:nth-child(8) { animation-delay: 280ms; }
+.stagger-children > *:nth-child(9) { animation-delay: 320ms; }
+.stagger-children > *:nth-child(10) { animation-delay: 360ms; }
+
+/* Nav pill sliding indicator */
+.nav-indicator {
+  transition: transform 300ms cubic-bezier(0.22, 1, 0.36, 1),
+              width 300ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,0 +1,141 @@
+{
+  "name": "chattt",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Floating liquid-glass WhatsApp chat overlay (Electron + React + TypeScript + Baileys)",
+  "author": "Ali Bashmail <alibashmail2010@yahoo.com>",
+  "type": "module",
+  "main": "dist-electron/main.cjs",
+  "scripts": {
+    "dev": "concurrently -k \"vite\" \"wait-on http://localhost:5173 && env -u ELECTRON_RUN_AS_NODE electron . --no-sandbox\"",
+    "dev:web": "vite --host",
+    "build": "tsc -b && node -e \"require('node:fs').rmSync('dist-electron',{recursive:true,force:true})\" && vite build && node -e \"const fs=require('node:fs');fs.cpSync('electron/main.cjs','dist-electron/main.cjs');fs.cpSync('electron/preload.cjs','dist-electron/preload.cjs');fs.cpSync('electron/wa-service.cjs','dist-electron/wa-service.cjs')\"",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:linux": "npm run build && electron-builder --linux --x64",
+    "lint": "npx tsc --noEmit -p tsconfig.app.json"
+  },
+  "dependencies": {
+    "baileys": "7.0.0-rc14",
+    "pino": "^9.6.0",
+    "qrcode": "^1.5.4",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "zustand": "^5.0.14"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.1",
+    "@types/node": "^24.13.2",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.2",
+    "concurrently": "^10.0.3",
+    "electron": "^42.5.0",
+    "electron-builder": "^26.15.3",
+    "tailwindcss": "^4.3.1",
+    "typescript": "~5.9.3",
+    "vite": "^8.1.0",
+    "vite-plugin-electron": "^1.1.0",
+    "vite-plugin-electron-renderer": "^1.0.0",
+    "wait-on": "^9.0.10"
+  },
+  "build": {
+    "appId": "com.chattt.overlay",
+    "productName": "chattt",
+    "afterPack": "./scripts/after-pack.cjs",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "build/icon.png",
+      "node_modules/baileys/**/*",
+      "node_modules/pino/**/*",
+      "node_modules/protobufjs/**/*",
+      "node_modules/@protobufjs/**/*",
+      "node_modules/@hapi/**/*",
+      "node_modules/@sideway/**/*",
+      "node_modules/@cacheable/**/*",
+      "node_modules/ws/**/*",
+      "node_modules/axios/**/*",
+      "node_modules/follow-redirects/**/*",
+      "node_modules/form-data/**/*",
+      "node_modules/asynckit/**/*",
+      "node_modules/combined-stream/**/*",
+      "node_modules/mime-types/**/*",
+      "node_modules/mime-db/**/*",
+      "node_modules/delayed-stream/**/*",
+      "node_modules/proxy-from-env/**/*",
+      "node_modules/libsignal/**/*",
+      "node_modules/whatsapp-rust-bridge/**/*",
+      "node_modules/qrcode/**/*",
+      "node_modules/dijkstrajs/**/*",
+      "node_modules/joi/**/*",
+      "node_modules/@hapi/topo/**/*",
+      "node_modules/@hapi/hoek/**/*",
+      "node_modules/@hapi/address/**/*",
+      "node_modules/@hapi/formula/**/*",
+      "node_modules/@hapi/pinpoint/**/*",
+      "node_modules/async-mutex/**/*",
+      "node_modules/tslib/**/*",
+      "node_modules/music-metadata/**/*",
+      "node_modules/strtok3/**/*",
+      "node_modules/peek-readable/**/*",
+      "node_modules/@tokenizer/**/*",
+      "node_modules/@borewit/**/*",
+      "node_modules/uint8array-extras/**/*",
+      "node_modules/file-type/**/*",
+      "node_modules/lru-cache/**/*",
+      "node_modules/p-queue/**/*",
+      "node_modules/p-timeout/**/*",
+      "node_modules/eventemitter3/**/*",
+      "node_modules/@noble/**/*",
+      "node_modules/future/**/*",
+      "node_modules/keyv/**/*",
+      "node_modules/json-buffer/**/*",
+      "node_modules/thread-stream/**/*",
+      "node_modules/real-require/**/*",
+      "node_modules/quick-format-unescaped/**/*",
+      "node_modules/safe-stable-stringify/**/*",
+      "node_modules/sonic-boom/**/*",
+      "node_modules/atomic-sleep/**/*",
+      "node_modules/on-exit-leak-free/**/*",
+      "!**/*.map",
+      "!**/*.md",
+      "!**/*.ts",
+      "!**/test/**",
+      "!**/tests/**",
+      "!**/__tests__/**",
+      "!**/example/**",
+      "!**/examples/**"
+    ],
+    "extraMetadata": {
+      "main": "dist-electron/main.cjs"
+    },
+    "asarUnpack": [
+      "node_modules/whatsapp-rust-bridge/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Network",
+      "maintainer": "Ali Bashmail <alibashmail2010@yahoo.com>"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}
