@@ -7,9 +7,9 @@
   "type": "module",
   "main": "dist-electron/main.cjs",
   "scripts": {
-    "dev": "concurrently -k \"vite\" \"wait-on http://localhost:5173 && env -u ELECTRON_RUN_AS_NODE electron . --no-sandbox\"",
+    "dev": "concurrently -k \"vite\" \"wait-on http://localhost:5173 && node scripts/sync-electron.cjs && env -u ELECTRON_RUN_AS_NODE electron . --no-sandbox\"",
     "dev:web": "vite --host",
-    "build": "tsc -b && node -e \"require('node:fs').rmSync('dist-electron',{recursive:true,force:true})\" && vite build && node -e \"const fs=require('node:fs');fs.cpSync('electron/main.cjs','dist-electron/main.cjs');fs.cpSync('electron/preload.cjs','dist-electron/preload.cjs');fs.cpSync('electron/wa-service.cjs','dist-electron/wa-service.cjs')\"",
+    "build": "tsc -b && vite build && node scripts/sync-electron.cjs",
     "dist:win": "npm run build && electron-builder --win",
     "dist:linux": "npm run build && electron-builder --linux --x64",
     "lint": "npx tsc --noEmit -p tsconfig.app.json"
@@ -35,8 +35,6 @@
     "tailwindcss": "^4.3.1",
     "typescript": "~5.9.3",
     "vite": "^8.1.0",
-    "vite-plugin-electron": "^1.1.0",
-    "vite-plugin-electron-renderer": "^1.0.0",
     "wait-on": "^9.0.10"
   },
   "build": {

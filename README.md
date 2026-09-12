@@ -26,7 +26,7 @@ Behavior notes:
 - Returning users with a saved session see "Loading chats…" while syncing, never a login flash.
 - Chat names prefer your phone-saved names (address-book sync), then group subjects, then profile names.
 - Archived chats hide behind an 📦 row + a Settings toggle.
-- Always pack via `npm run dist:*` (rebuilds first) — a `vite` dev run dirties `dist-electron/` with watch artifacts.
+- Always pack via `npm run dist:*` (rebuilds first). `dist-electron/` holds raw CJS copies of `electron/` (synced by `scripts/sync-electron.cjs`) — never hand-edit it.
 
 ## Status
 

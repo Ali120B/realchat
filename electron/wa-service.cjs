@@ -683,6 +683,7 @@ function createWaService({ authDir, cacheDir, emit }) {
 
     sock.ev.on('contacts.upsert', async (list) => {
       let changed = false
+      let patchLike = 0
       for (const c of list) {
         if (!c.id) continue
         const id = await normalizeJid(c.id)
@@ -691,6 +692,7 @@ function createWaService({ authDir, cacheDir, emit }) {
         // contactAction / lidContactAction patches carry the PHONE-saved name.
         // (Patch signal = truthy lid/phoneNumber/username — history contacts lack these.)
         if (c.lid || c.phoneNumber || c.username) {
+          patchLike += 1
           if (c.name && c.name !== next.savedName) {
             next.savedName = c.name
             changed = true
@@ -717,6 +719,9 @@ function createWaService({ authDir, cacheDir, emit }) {
       if (changed) {
         emit({ kind: 'chats', chats: publicChats(), archived: archivedCount() })
         scheduleSnapshot()
+      }
+      if (list.length > 0) {
+        console.log(`[chattt:wa] contacts upsert: ${list.length} entries (${patchLike} address-book)`)
       }
     })
 
