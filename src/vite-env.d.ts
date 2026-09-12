@@ -26,6 +26,8 @@ interface WaBridge {
   startChat: (jid: string) => Promise<WaResult>
   showArchived: (show: boolean) => Promise<WaResult>
   refreshPic: (chatId: string) => Promise<WaResult>
+  resetCache: () => Promise<WaResult>
+  debugTwins: () => Promise<WaResult>
   pickFile: () => Promise<WaResult>
   sendFile: (chatId: string, filePath: string) => Promise<WaResult>
   onEvent: (callback: (payload: { kind: string; [key: string]: unknown }) => void) => () => void

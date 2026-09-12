@@ -17,7 +17,10 @@ export function SettingsPanel() {
   const showArchived = useWaStore((s) => s.showArchived)
   const archivedCount = useWaStore((s) => s.archivedCount)
   const toggleArchived = useWaStore((s) => s.toggleArchived)
+  const resetCache = useWaStore((s) => s.resetCache)
+  const logDiagnostics = useWaStore((s) => s.logDiagnostics)
   const [confirmLogout, setConfirmLogout] = useState(false)
+  const [confirmReset, setConfirmReset] = useState(false)
 
   return (
     <div className="scroll-thin min-h-0 flex-1 space-y-3 overflow-y-auto p-3 text-sm">
@@ -84,7 +87,24 @@ export function SettingsPanel() {
         </label>
       </section>
 
-      <section>
+      <section className="space-y-2">
+        {confirmReset ? (
+          <div className="flex gap-2">
+            <button type="button" onClick={() => { resetCache(); setConfirmReset(false) }} className="flex-1 rounded-full bg-[var(--color-accent)] py-1.5 text-xs font-semibold text-black">
+              Wipe & resync now
+            </button>
+            <button type="button" onClick={() => setConfirmReset(false)} className="glass-chip flex-1 rounded-full py-1.5 text-xs">
+              Keep
+            </button>
+          </div>
+        ) : (
+          <button type="button" onClick={() => setConfirmReset(true)} className="glass-chip w-full rounded-full py-1.5 text-xs">
+            🧹 Clear cache & resync chats…
+          </button>
+        )}
+        <button type="button" onClick={logDiagnostics} className="glass-chip w-full rounded-full py-1.5 text-xs text-[var(--color-text-secondary)]">
+          Log twin diagnostics to terminal
+        </button>
         {connection === 'ready' || !live ? (
           confirmLogout ? (
             <div className="flex gap-2">

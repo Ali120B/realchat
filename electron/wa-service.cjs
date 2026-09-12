@@ -1390,6 +1390,66 @@ function createWaService({ authDir, cacheDir, emit }) {
     return { ok: true, showArchived, archived: archivedCount() }
   }
 
+  // Wipe all local chat state (keeps the login session) and resync from server.
+  // Fixes stale twins/ghosts that incremental sync can never reconcile.
+  async function resetCache() {
+    chats.clear()
+    messages.clear()
+    rawById.clear()
+    rawOrder.length = 0
+    lidCache.clear()
+    lidReverseChecked.clear()
+    senderNames.clear()
+    onlineChats.clear()
+    subscribedPresence.clear()
+    try {
+      fs.rmSync(snapshotPath, { force: true })
+    } catch {
+      // ignore
+    }
+    emit({ kind: 'chats', chats: [], archived: 0 })
+    setConnection('syncing')
+    try {
+      sock?.end()
+    } catch {
+      // ignore — connect() creates a fresh socket
+    }
+    sock = null
+    reconnectAttempt = 0
+    setTimeout(() => {
+      if (!stopped) void connect()
+    }, 1000)
+    return { ok: true }
+  }
+
+  // Twin diagnostics (IDs masked, names included — local terminal only).
+  // Shows same-digit DM groups and unresolved @lid chats so splits are provable.
+  function debugTwins() {
+    const groups = new Map()
+    for (const id of chats.keys()) {
+      if (isJunkChat(id) || id.endsWith('@g.us')) continue
+      const d = digitsOf(id)
+      if (d.length < 7) continue
+      if (!groups.has(d)) groups.set(d, [])
+      groups.get(d).push(id)
+    }
+    let twins = 0
+    for (const [d, ids] of groups) {
+      if (ids.length < 2) continue
+      twins += 1
+      console.log(`[chattt:wa] twin group +${d.slice(0, 3)}***${d.slice(-4)} (${ids.length}):`)
+      for (const id of ids) {
+        const c = chats.get(id) || {}
+        console.log(
+          `  - ${maskJid(id)} name="${displayNameFor(id, chats, contacts)}" msgs=${(messages.get(id) || []).length} ts=${c.conversationTimestamp || 0}`,
+        )
+      }
+    }
+    const stuckLids = [...chats.keys()].filter((id) => id.endsWith('@lid') && !lidCache.has(id))
+    console.log(`[chattt:wa] twins: ${twins} groups, ${stuckLids.length} unresolved @lid chats, lidCache=${lidCache.size}`)
+    return { ok: true, twins, stuckLids: stuckLids.length }
+  }
+
   return {
     start,
     stop,
@@ -1413,6 +1473,8 @@ function createWaService({ authDir, cacheDir, emit }) {
     resolveContact,
     startChat,
     setShowArchived,
+    resetCache,
+    debugTwins,
   }
 }
 

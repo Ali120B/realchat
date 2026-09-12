@@ -169,7 +169,10 @@ function createWindow() {
     frame: false,
     transparent: true,
     alwaysOnTop: true,
-    resizable: false,
+    // resizable:true so programmatic setSize can grow AND shrink (a
+    // resizable:false window refuses to shrink on some platforms);
+    // will-resize below blocks user-driven resizing instead.
+    resizable: true,
     skipTaskbar: true,
     hasShadow: false,
     focusable: true,
@@ -182,6 +185,11 @@ function createWindow() {
       nodeIntegration: false,
       backgroundThrottling: false,
     },
+  })
+
+  // No user resizing — overlay size is controlled by S/M/L settings only.
+  mainWindow.on('will-resize', (e) => {
+    e.preventDefault()
   })
 
   assertAlwaysOnTop()
@@ -325,6 +333,8 @@ function initWa() {
   waHandler('wa:start-chat', (jid) => wa.startChat(jid))
   waHandler('wa:show-archived', (show) => wa.setShowArchived(show))
   waHandler('wa:refresh-pic', (chatId) => wa.refreshPic(chatId))
+  waHandler('wa:reset-cache', () => wa.resetCache())
+  waHandler('wa:debug-twins', () => wa.debugTwins())
   ipcMain.handle('wa:pick-file', async () => {
     if (!mainWindow || mainWindow.isDestroyed()) return { ok: false, error: 'no-window' }
     const res = await dialog.showOpenDialog(mainWindow, {

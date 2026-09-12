@@ -47,6 +47,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     startChat: (jid) => ipcRenderer.invoke('wa:start-chat', jid),
     showArchived: (show) => ipcRenderer.invoke('wa:show-archived', show),
     refreshPic: (chatId) => ipcRenderer.invoke('wa:refresh-pic', chatId),
+    resetCache: () => ipcRenderer.invoke('wa:reset-cache'),
+    debugTwins: () => ipcRenderer.invoke('wa:debug-twins'),
     pickFile: () => ipcRenderer.invoke('wa:pick-file'),
     sendFile: (chatId, filePath) => ipcRenderer.invoke('wa:send-file', chatId, filePath),
     onEvent: (callback) => {

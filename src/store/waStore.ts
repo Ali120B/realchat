@@ -68,6 +68,8 @@ interface WaState {
   startChat: (jid: string) => void
   toggleArchived: () => void
   refreshPic: (chatId: string) => void
+  resetCache: () => void
+  logDiagnostics: () => void
   totalUnread: () => number
 }
 
@@ -471,6 +473,25 @@ export const useWaStore = create<WaState>((set, get) => {
       const bridge = api()
       if (!bridge || !chatId) return
       void bridge.refreshPic(chatId).catch(() => {})
+    },
+
+    resetCache: () => {
+      const bridge = api()
+      if (!bridge) return
+      // Local wipe (login kept) → full resync; clears stale twins for good
+      set({ chats: [], messagesByChat: {}, activeChatId: null, connection: 'syncing' })
+      void bridge.resetCache().catch((e) => useToastStore.getState().push(failMsg(e), 'error'))
+    },
+
+    logDiagnostics: () => {
+      const bridge = api()
+      if (!bridge) return
+      void bridge.debugTwins().then((res) => {
+        useToastStore.getState().push(
+          res?.ok ? `Diagnostics in terminal: ${res.twins} twin groups, ${res.stuckLids} unresolved` : failMsg(res),
+          res?.ok ? 'info' : 'error',
+        )
+      }).catch((e) => useToastStore.getState().push(failMsg(e), 'error'))
     },
 
     totalUnread: () => get().chats.reduce((a, c) => a + c.unread, 0),
