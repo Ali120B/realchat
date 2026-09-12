@@ -234,6 +234,7 @@ function createWaService({ authDir, cacheDir, emit }) {
   const rawById = new Map() // msgId -> proto (for quote/edit context), capped
   const rawOrder = []
   const lidCache = new Map() // @lid jid -> resolved @s.whatsapp.net jid
+  const lidReverseChecked = new Set() // PN jids already reverse-resolved this session
   const senderNames = new Map() // participant jid -> display name (from pushName)
   const onlineChats = new Set() // chat/participant JIDs currently online
   const subscribedPresence = new Set() // JIDs we've sent presenceSubscribe for
@@ -515,6 +516,38 @@ function createWaService({ authDir, cacheDir, emit }) {
       }
       if (moved > 0) {
         console.log(`[chattt:wa] re-keyed ${moved} LID chats to phone numbers`)
+        emit({ kind: 'chats', chats: publicChats(), archived: archivedCount() })
+      }
+    }
+    // Reverse direction: ask the server for each PN chat's LID (active usync
+    // query on cache miss) and fold any matching @lid twin into the PN chat.
+    // This catches pairs the passive LID->PN direction can never resolve.
+    const pnIds = [...chats.keys()]
+      .filter((id) => id.endsWith('@s.whatsapp.net') && !lidReverseChecked.has(id))
+      .sort((a, b) => ((chats.get(b) || {}).conversationTimestamp || 0) - ((chats.get(a) || {}).conversationTimestamp || 0))
+      .slice(0, 60)
+    if (pnIds.length > 0) {
+      let reverseMerged = 0
+      for (let i = 0; i < pnIds.length; i += 8) {
+        const batch = pnIds.slice(i, i + 8)
+        const results = await Promise.allSettled(
+          batch.map((id) =>
+            withTimeout(sock.signalRepository?.lidMapping?.getLIDForPN(id), 12000).then((lid) => ({ id, lid })),
+          ),
+        )
+        for (const r of results) {
+          if (r.status !== 'fulfilled') continue
+          lidReverseChecked.add(r.value.id)
+          const { id, lid } = r.value
+          if (lid && lid !== id && chats.has(lid)) {
+            lidCache.set(lid, id)
+            if (rekeyChat(lid, id)) reverseMerged += 1
+          }
+        }
+        if (stopped) return
+      }
+      if (reverseMerged > 0) {
+        console.log(`[chattt:wa] reverse-merged ${reverseMerged} LID twins into phone chats`)
         emit({ kind: 'chats', chats: publicChats(), archived: archivedCount() })
       }
     }
@@ -1174,6 +1207,7 @@ function createWaService({ authDir, cacheDir, emit }) {
     rawById.clear()
     rawOrder.length = 0
     lidCache.clear()
+    lidReverseChecked.clear()
     senderNames.clear()
     try {
       fs.rmSync(snapshotPath, { force: true })
