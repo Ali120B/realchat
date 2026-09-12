@@ -185,13 +185,21 @@ function normalizeMsg(protoMsg, resolved) {
   }
 }
 
-function displayNameFor(id, chats, contacts) {
+function displayNameFor(id, chats, contacts, messages) {
   const c = chats.get(id) || {}
   if (c.name) return c.name
   const contact = contacts.get(id)
   // Priority: phone-saved name > any synced name > profile/push name > number
   if (contact && (contact.savedName || contact.name || contact.notify)) {
     return contact.savedName || contact.name || contact.notify
+  }
+  // Last resort before a raw number: a sender name from this chat's own messages
+  const arr = messages ? messages.get(id) : null
+  if (arr) {
+    for (let i = arr.length - 1; i >= 0; i -= 1) {
+      const s = arr[i] && arr[i].senderName
+      if (s) return s
+    }
   }
   if (!id) return 'Unknown'
   if (id.endsWith('@g.us')) return 'Group'
@@ -212,7 +220,7 @@ function toChat(id, chats, contacts, messages, presence) {
   const contact = contacts.get(id) || {}
   return {
     id,
-    name: displayNameFor(id, chats, contacts),
+    name: displayNameFor(id, chats, contacts, messages),
     pic: contact.pic || null,
     isGroup: id.endsWith('@g.us'),
     lastMsg: last ? lastMsgLabel(last) : c.lastMsg || '',
@@ -577,9 +585,11 @@ function createWaService({ authDir, cacheDir, emit }) {
         )
         for (const r of results) {
           if (r.status !== 'fulfilled') continue
-          lidReverseChecked.add(r.value.id)
           const { id, lid } = r.value
-          if (lid && lid !== id && chats.has(lid)) {
+          // Only remember successes — a null/failed lookup must retry next pass
+          if (!lid) continue
+          lidReverseChecked.add(id)
+          if (lid !== id && chats.has(lid)) {
             lidCache.set(lid, id)
             if (rekeyChat(lid, id)) reverseMerged += 1
           }
@@ -1475,7 +1485,7 @@ function createWaService({ authDir, cacheDir, emit }) {
       for (const id of ids) {
         const c = chats.get(id) || {}
         console.log(
-          `  - ${maskJid(id)} name="${displayNameFor(id, chats, contacts)}" msgs=${(messages.get(id) || []).length} ts=${c.conversationTimestamp || 0}`,
+          `  - ${maskJid(id)} name="${displayNameFor(id, chats, contacts, messages)}" msgs=${(messages.get(id) || []).length} ts=${c.conversationTimestamp || 0}`,
         )
       }
     }
