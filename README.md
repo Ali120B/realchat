@@ -25,7 +25,12 @@ Get the latest Windows installer or Linux AppImage from the Releases page (publi
 
 ## Window managers (Hyprland)
 
-chattt must float — find its class first:
+On Wayland the app runs through XWayland automatically (native Wayland forbids
+programmatic move/resize/focus, which an overlay needs) and asks the compositor
+to float it as a toolbar window. No setup needed in most cases — set
+`CHATTT_NATIVE_WAYLAND=1` to opt out back to native Wayland.
+
+If it still tiles, force it with a rule — find the class first:
 
 ```bash
 hyprctl clients | grep -i -A2 chattt

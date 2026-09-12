@@ -11,6 +11,20 @@ app.commandLine.appendSwitch('enable-gpu-rasterization')
 app.commandLine.appendSwitch('enable-zero-copy')
 app.commandLine.appendSwitch('ignore-gpu-blocklist')
 
+// Wayland (Hyprland etc.): Electron cannot programmatically move, resize,
+// focus, or always-on-top native Wayland windows — the overlay would tile and
+// ignore positioning. Run through XWayland instead, where all of that works
+// and the toolbar window type floats by default. Opt out with CHATTT_NATIVE_WAYLAND=1.
+if (
+  process.platform === 'linux' &&
+  process.env.WAYLAND_DISPLAY &&
+  !process.env.CHATTT_NATIVE_WAYLAND &&
+  !app.commandLine.hasSwitch('ozone-platform')
+) {
+  app.commandLine.appendSwitch('ozone-platform', 'x11')
+  console.log('[chattt] Wayland detected — using XWayland backend for overlay control')
+}
+
 const isDev = !app.isPackaged
 const WINDOW_SIZE = 72
 
@@ -179,6 +193,9 @@ function createWindow() {
     fullscreenable: false,
     acceptFirstMouse: true,
     thickFrame: false,
+    // Toolbar type: floating utility window on X11/XWayland tiling compositors
+    // (Hyprland, Sway, i3). Ignored on other platforms. Frameless => no visible change.
+    ...(process.platform === 'linux' ? { type: 'toolbar' } : {}),
     webPreferences: {
       preload: getPreloadPath(),
       contextIsolation: true,
