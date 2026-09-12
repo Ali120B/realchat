@@ -12,7 +12,9 @@ function now() {
 }
 
 function digitsOf(jid) {
-  return String(jid || '').split('@')[0].replace(/\D/g, '')
+  // Strip device suffixes first (12345:12@lid, 12345.2@s.whatsapp.net) so forms compare equal
+  const user = String(jid || '').split('@')[0].split(':')[0].split('.')[0]
+  return user.replace(/\D/g, '')
 }
 
 // Mask a JID for logs: +971***7720@s.whatsapp.net (privacy-safe, still identifiable)
@@ -246,6 +248,7 @@ function createWaService({ authDir, cacheDir, emit }) {
   const senderNames = new Map() // participant jid -> display name (from pushName)
   const onlineChats = new Set() // chat/participant JIDs currently online
   const subscribedPresence = new Set() // JIDs we've sent presenceSubscribe for
+  const msgChatIdx = new Map() // message id -> chat id (twin detection: ids are globally unique)
   let showArchived = false
   let metaRefreshTimer = null
 
@@ -273,6 +276,7 @@ function createWaService({ authDir, cacheDir, emit }) {
       seen.add(m.id)
       arr.push(m)
       fresh.push(m)
+      msgChatIdx.set(m.id, chatId)
     }
     if (arr.length > MSG_CAP) arr.splice(0, arr.length - MSG_CAP)
     const c = chats.get(chatId) || {}
@@ -310,7 +314,12 @@ function createWaService({ authDir, cacheDir, emit }) {
       if (!fs.existsSync(snapshotPath)) return
       const snap = JSON.parse(fs.readFileSync(snapshotPath, 'utf8'))
       for (const [k, v] of snap.chats || []) chats.set(k, v)
-      for (const [k, v] of snap.messages || []) messages.set(k, v)
+      for (const [k, v] of snap.messages || []) {
+        messages.set(k, v)
+        for (const m of v || []) {
+          if (m?.id) msgChatIdx.set(m.id, k)
+        }
+      }
       for (const [k, v] of snap.contacts || []) contacts.set(k, v)
       for (const [k, v] of snap.lid || []) lidCache.set(k, v)
     } catch {
@@ -360,10 +369,11 @@ function createWaService({ authDir, cacheDir, emit }) {
     if (messages.has(fromId)) {
       const merged = [...(messages.get(toId) || []), ...messages.get(fromId)]
       const seen = new Set()
-      messages.set(
-        toId,
-        merged.filter((m) => (seen.has(m.id) ? false : (seen.add(m.id), (m.chatId = toId), true))).sort((a, b) => a.ts - b.ts),
-      )
+      const finalArr = merged
+        .filter((m) => (seen.has(m.id) ? false : (seen.add(m.id), (m.chatId = toId), true)))
+        .sort((a, b) => a.ts - b.ts)
+      messages.set(toId, finalArr)
+      for (const m of finalArr) msgChatIdx.set(m.id, toId)
       messages.delete(fromId)
     }
     console.log(
@@ -387,6 +397,24 @@ function createWaService({ authDir, cacheDir, emit }) {
       if (sameDm(id, jid)) return id
     }
     return null
+  }
+
+  // Message ids are globally unique: if this id already lives under another
+  // chat, both entries are the same conversation split across addresses.
+  // Returns the surviving chat id (may differ from input).
+  function foldTwinByMessage(chatId, msgId) {
+    if (!msgId || !chatId) return chatId
+    const known = msgChatIdx.get(msgId)
+    if (!known || known === chatId || !chats.has(known) || !chats.has(chatId)) return chatId
+    const aMsgs = (messages.get(known) || []).length
+    const bMsgs = (messages.get(chatId) || []).length
+    const keep = aMsgs >= bMsgs ? known : chatId
+    const drop = keep === known ? chatId : known
+    if (mergeChats(drop, keep, 'shared message id')) {
+      emit({ kind: 'chats', chats: publicChats(), archived: archivedCount() })
+      return keep
+    }
+    return chatId
   }
 
   // Subscribe presence for the most-recent DMs so the list can show online dots.
@@ -783,7 +811,8 @@ function createWaService({ authDir, cacheDir, emit }) {
       }
       for (const m of hm || []) {
         if (!m.key?.remoteJid || isJunkChat(m.key.remoteJid) || isProtocolOnly(m)) continue
-        const chatId = await normalizeJid(m.key.remoteJid)
+        let chatId = await normalizeJid(m.key.remoteJid)
+        chatId = foldTwinByMessage(chatId, m.key.id)
         rememberRaw(m.key.id, m)
         const { senderJid, senderName } = await resolveSender(m.key, m.pushName)
         pushMessages(chatId, [normalizeMsg(m, { chatId, senderJid, senderName })])
@@ -906,6 +935,8 @@ function createWaService({ authDir, cacheDir, emit }) {
       for (const m of list || []) {
         if (!m.key?.remoteJid || isJunkChat(m.key.remoteJid) || isProtocolOnly(m)) continue
         let chatId = await normalizeJid(m.key.remoteJid)
+        // Same message id under another chat = same conversation split: fold first
+        chatId = foldTwinByMessage(chatId, m.key.id)
         // Learn identity links from the stanza itself (alt forms cross LID/PN)
         const alt = m.key.remoteJidAlt
         if (alt && alt !== m.key.remoteJid && !isJunkChat(alt)) {
@@ -1066,6 +1097,7 @@ function createWaService({ authDir, cacheDir, emit }) {
         const idx = arr ? arr.findIndex((x) => x.id === id) : -1
         if (idx < 0 || !arr) continue
         arr.splice(idx, 1)
+        msgChatIdx.delete(id)
         changed = true
         emit({ kind: 'message-deleted', chatId, msgId: id })
       }
@@ -1216,6 +1248,7 @@ function createWaService({ authDir, cacheDir, emit }) {
     }
     chats.clear()
     messages.clear()
+    msgChatIdx.clear()
     rawById.clear()
     rawOrder.length = 0
     lidCache.clear()
@@ -1395,6 +1428,7 @@ function createWaService({ authDir, cacheDir, emit }) {
   async function resetCache() {
     chats.clear()
     messages.clear()
+    msgChatIdx.clear()
     rawById.clear()
     rawOrder.length = 0
     lidCache.clear()
